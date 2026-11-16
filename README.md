@@ -9,16 +9,19 @@ Turn a VTuber character reference sheet into a rigged 2D model, with one click.
 ## Quick start (Windows)
 
 1. Install [Python 3.10+](https://www.python.org/downloads/) (tick "Add Python to PATH").
-2. Download `vtuber_one_click_gui.py` and double-click it.
-3. Enter your model name, pick your filled-in reference sheet (front view), tick your character's traits, and choose where to save the model zip.
-4. Click **Build my model**.
+2. Download `vtuber_one_click.py`, put it in its own folder and double-click it.
+3. The app opens in your web browser. It runs only on your PC; keep the small black window open while you use it and close it to quit.
+4. **Build tab:** enter your character's name, choose or drop your character sheet (front view), tick what your character has, pick your options and where to save the model, then click **Build**.
 
-Until the pipeline is connected, the button does a dry run and saves your job settings as `<model name>_job.json`.
+Until the pipeline is connected, Build does a dry run and saves your settings as `<name>_job.json`.
 
-## Traits
+## Screens
 
-Horns · Hat/Hood · Cat ears · Short hair · Dress · Jacket · Tail · Wings
-Long hair: coming soon.
+- **Build**: character, traits, options (movement, eye glow colour, emotes and extras), save folder.
+- **Fix my model**: tick what looks wrong for a quick rebuild. *Coming soon.*
+- **Fix with Claude**: describe the problem and let Claude fix the model with your own Claude account. *Coming soon.*
+
+Long hair, ponytails, dresses/skirts and wings are shown as *soon* and can't be selected yet.
 
 ## Requirements
 
