@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
+# Big / generated files - keep out of the repo
+*.psd
+*.psd2live
+*.cmo3
+*.moc3
+*.zip
+*.safetensors
+*.ckpt
+*_job.json
+output/
+Test Models/
