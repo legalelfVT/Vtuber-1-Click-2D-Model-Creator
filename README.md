@@ -1,34 +1,84 @@
 # Vtuber 1-Click 2D Model Creator
 
-Turn a VTuber character reference sheet into a rigged 2D model, with one click.
+Turn one picture of your character into a moving VTuber model for **VTube Studio**. No rigging skills needed.
 
-**Pipeline:** reference sheet → ComfyUI ([See-through](https://github.com/jtydhr88/ComfyUI-See-through) layer split) → [PSD2Live](https://github.com/tsunehimatoi/psd2live) → rigged Live2D model (.zip)
+![Example character sheet: Legal Elf](examples/Legal_Elf_Template.png)
 
-> Status: **alpha**. The GUI is in place; the pipeline is being connected.
+> Status: **alpha**. It works, but expect some rough edges. Long hair, ponytails, dresses and wings are not supported yet.
 
-## Quick start (Windows)
+---
 
-1. Install [Python 3.10+](https://www.python.org/downloads/) (tick "Add Python to PATH").
-2. Download `vtuber_one_click.py`, put it in its own folder and double-click it.
-3. The app opens in your web browser. It runs only on your PC; keep the small black window open while you use it and close it to quit.
-4. **Build tab:** enter your character's name, choose or drop your character sheet (front view), tick what your character has, pick your options and where to save the model, then click **Build**.
+## What you need
 
-Until the pipeline is connected, Build does a dry run and saves your settings as `<name>_job.json`.
+- A Windows 10 or 11 PC
+- An **NVIDIA graphics card with 8 GB or more** (for example an RTX 3060, 3070 or 4060)
+- About **30 GB of free space**
+- An internet connection for the first setup
 
-## Screens
+## Step 1: Install
 
-- **Build**: character, traits, options (movement, eye glow colour, emotes and extras), save folder.
-- **Fix my model**: tick what looks wrong for a quick rebuild. *Coming soon.*
-- **Fix with Claude**: describe the problem and let Claude fix the model with your own Claude account. *Coming soon.*
+1. Download **VTuber One-Click Setup.exe**.
+2. Double-click it and click **Next**.
+3. Pick a folder (the suggested `C:\VTuberOneClick` is fine) and click **Install**.
+4. Wait about 10 to 20 minutes while it downloads everything. Then click **Finish**.
 
-Long hair, ponytails, dresses/skirts and wings are shown as *soon* and can't be selected yet.
+You now have a **VTuber One-Click** icon on your Desktop.
 
-## Requirements
+## Step 2: Make your character sheet
 
-- Windows 10/11 with an NVIDIA GPU (8 GB VRAM tested)
-- [ComfyUI](https://github.com/comfyanonymous/ComfyUI) with the See-through custom node
-- [PSD2Live](https://github.com/tsunehimatoi/psd2live)
+The app needs one picture laid out in a special way, called a **character sheet**.
+
+1. Download the blank template: **[VTuber_Sheet_Template_BLANK.png](examples/VTuber_Sheet_Template_BLANK.png)**
+   (the app's **Save blank template** button gives you the same file).
+2. Look at the finished example so you know what to aim for: **[Legal_Elf_Template.png](examples/Legal_Elf_Template.png)**
+3. Give the blank template to an image AI (for example ChatGPT) together with a picture of your character.
+   In the app, tick what your character has, then click **Copy ChatGPT prompt** and paste that prompt in.
+4. Save the result. It should look like the example:
+   - **Left box:** your character's whole body, facing front, arms slightly out
+   - **Right box:** a close-up of the head, same face
+   - **Grey boxes:** the mouth, teeth, tongue, eyes and eyebrows, one in each box
+   - The four **black squares in the corners** must still be there
+   - Best size: **3072 x 2048** pixels (any 3:2 picture works, bigger is better)
+
+## Step 3: Build your model
+
+1. Double-click **VTuber One-Click** on your Desktop. It opens in your web browser.
+2. Type your character's **name**.
+3. Click the sheet box and choose your character sheet.
+4. Tick everything your character has (hair, ears, horns, coat, tail...).
+5. Choose where to save the model, then click **Build**.
+
+A black **ComfyUI** window opens. Leave it open. Building takes **1 to 2 hours** on an 8 GB card, and the
+very first build also downloads the AI models (about 13 GB). When it is done, the app tells you where your model zip is.
+
+## Step 4: Use it in VTube Studio
+
+1. Unzip the model zip.
+2. Put the folder inside VTube Studio's `Live2DModels` folder
+   (in Steam: right-click VTube Studio > Manage > Browse local files > `VTube Studio_Data\StreamingAssets\Live2DModels`).
+3. Open VTube Studio and pick your model.
+
+Your model comes with blinking, mouth movement, head turns, hair physics and expressions
+(Eye Glow, Angry, Stunned, DED) that you can put on hotkeys.
+
+## Tips
+
+- Clean, simple drawings work best: front view, plain background, no text inside the boxes.
+- Draw the open mouth smaller than its grey box, with space around it.
+- If something looks wrong, build again with a better sheet. The app keeps your old model.
+
+## Uninstall
+
+Windows **Settings > Apps > Installed apps > VTuber One-Click > Uninstall**.
+
+---
+
+## How it works
+
+Reference sheet > ComfyUI with [See-through](https://github.com/jtydhr88/ComfyUI-See-through) (splits the picture
+into layers) > [PSD2Live](https://github.com/tsunehimatoi/psd2live) 3.4.5 (rigs the layers) > a VTube Studio model zip.
 
 ## License
 
-This project's own code is MIT (see `LICENSE`). It runs ComfyUI and PSD2Live as separate programs; those are GPL-3.0 and are **not** included here. Model checkpoints have their own licenses.
+This project's own code is MIT (see `LICENSE`). Setup downloads ComfyUI and PSD2Live from their official pages;
+they are GPL-3.0 and are not included here. The AI models have their own licenses.
