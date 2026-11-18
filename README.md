@@ -11,7 +11,6 @@ Models built with this tool, running in VTube Studio. Legal Elf is made from the
 <p>
 <img src="examples/02_full_body.jpg" height="320" alt="Legal Elf, full body">
 <img src="examples/05_talking.jpg" height="320" alt="Legal Elf talking">
-<img src="examples/06_laughing.jpg" height="320" alt="Legal Elf laughing">
 </p>
 <p>
 <img src="examples/08_kari_full.jpg" height="260" alt="Kari">
