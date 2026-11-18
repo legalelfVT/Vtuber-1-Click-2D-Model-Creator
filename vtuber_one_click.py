@@ -5,14 +5,14 @@ installed and nothing leaves your PC: the page is served from your own
 computer). Keep the small black window open while you use the app; close it
 to quit.
 
-If a `pipeline.py` with a `run(config, log)` function sits next to this file,
-the Build button calls it. Otherwise Build does a dry run and saves the job
-settings as `<save folder>/<character name>_job.json`.
+Installed by "VTuber One-Click Setup": Build runs the real pipeline (simple.py ->
+pipeline.py -> ComfyUI See-through -> PSD2Live) and copies the finished
+VTube Studio zip to the Save to folder. Without the pipeline files next to this
+file, Build does a dry run and saves the settings as `<name>_job.json`.
 
 Needs only Python 3.9+ (standard library).
 """
 
-import importlib.util
 import json
 import os
 import shutil
@@ -21,20 +21,25 @@ import struct
 import subprocess
 import sys
 import threading
+import time
+import urllib.request
 import webbrowser
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlparse
 
 APP_TITLE = "VTuber One-Click"
-APP_VERSION = "0.2.0-alpha"
+APP_VERSION = "0.3.1-alpha"
 HERE = os.path.dirname(os.path.abspath(__file__))
 WORK_DIR = os.path.join(os.path.expanduser("~"), "VTuber One-Click")
-TEMPLATE = os.path.join(HERE, "templates", "reference_sheet_template.png")
+TEMPLATE = os.path.join(HERE, "vtuber_sheet_template.png")
+PORT = 8765
+IDLE_EXIT_S = 180   # quit when no browser tab has checked in for this long (and no build runs)
 IMAGE_EXT = (".png", ".jpg", ".jpeg", ".webp")
 
 # ------------------------------------------------------------------ options
-GROUPS = [
+# Fallback trait list (used only when traits.py is not next to this file).
+FALLBACK_GROUPS = [
     ("Hair", ["Short hair", "Shoulder-length hair", "Long hair", "Bouncy / curly / wavy",
               "Bangs cover the eyebrows", "Ponytail / twin tails / buns"]),
     ("Face", ["Fangs", "Visible lips", "Small / delicate mouth", "Face markings / tattoos",
@@ -46,10 +51,11 @@ GROUPS = [
                 "Belt at the waist", "Dress / skirt"]),
     ("Body", ["Tattoos", "Tail", "Wings"]),
 ]
-# Shown but not selectable yet.
-SOON = ["Long hair", "Ponytail / twin tails / buns", "Dress / skirt", "Wings"]
+# Turned off in the app for now, even where the pipeline has basic handling.
+FORCE_SOON = {"long_hair", "Long hair"}
 
 MOVES = [("Body follows head", True), ("Bigger mouth", False), ("Big eyebrow movement", False)]
+MOVES_SOON = ["Bigger mouth", "Big eyebrow movement"]
 EXTRAS = [("Ears move with eyebrows", True), ("Eye glow", True), ("Angry, Stunned, DED emotes", True),
           ("Arm up / down hotkeys", True), ("Mouth O / E from microphone", True),
           ("Cheek puff + blush", False), ("Tail sways", True)]
@@ -72,25 +78,74 @@ ISSUES = [
 ]
 FIXES = {
     "No neck": "Keeps the body's neck under the close-up neck.",
-    "Mouth too small": "Mouth size 24% → 28% of the face.",
+    "Mouth too small": "Mouth size 24% \u2192 28% of the face.",
 }
 SHARES = ["Your character sheet", "The model's layers (PSD)", "Build log", "Your screenshots",
           "The finished VTube Studio model"]
 RULES = [("Ask me before changing any file", True), ("Install the fix into VTube Studio", False),
          ("Share the fix back to improve the tool", False)]
 
-PROMPT_INTRO = ("Fill in the attached character sheet template for my VTuber character. "
-                "Keep the template's layout, corner marks and cells exactly as they are. "
-                "Draw the character facing the front, in a flat anime style with clean outlines "
-                "and a plain white background. Put each part in its own cell and leave a cell "
-                "empty if the character doesn't have that part.\nMy character has:")
-PROMPT_OUTRO = "Don't add text, logos or extra poses."
-PROMPT_LINES = {
-    "Horns": "Horns: draw them on their own in the horns cell as well as on the head.",
-    "Tail": "A tail: draw it on its own in the tail cell, fully visible.",
-    "Hood": "A hood: show it down and up if it can move.",
-    "Remove the glasses": "Glasses in the art, but draw the face without them in the close-up.",
-}
+# Same wording as HOW_TO.txt.
+PROMPT_INTRO = ("Fill this template with my character. Keep the exact layout and the four black "
+                "corner squares. Left box: full body, front view, neutral face, arms slightly out. "
+                "Right box: head close-up, same angle and expression. Grey cells: one part each as "
+                "labelled, on a flat grey background, no checkerboard. No text inside any box. "
+                "Output size: 3072 x 2048.")
+PROMPT_OUTRO = ""
+
+
+def load_traits():
+    """Groups, items and prompt lines from traits.py (the pipeline's own list) when available."""
+    try:
+        sys.path.insert(0, HERE)
+        import traits as T
+        groups = []
+        for g in T.GROUPS:
+            items = []
+            for key, t in T.TRAITS.items():
+                if t.get("group") != g:
+                    continue
+                items.append({"key": key, "label": t["label"], "exclusive": t.get("exclusive"),
+                              "soon": t.get("status") == "planned" or key in FORCE_SOON})
+            groups.append({"name": g, "items": items})
+        lines = {k: t.get("prompt", "") for k, t in T.TRAITS.items()}
+        return groups, lines, True
+    except Exception:
+        groups = [{"name": n, "items": [{"key": l, "label": l, "exclusive": None, "soon": l in FORCE_SOON
+                                         or l in ("Ponytail / twin tails / buns", "Dress / skirt", "Wings")}
+                                        for l in items]} for n, items in FALLBACK_GROUPS]
+        return groups, {}, False
+
+
+GROUPS, PROMPT_LINES, HAS_TRAITS = load_traits()
+ALLOWED_TRAITS = {i["key"] for g in GROUPS for i in g["items"] if not i["soon"]}
+
+
+def has_pipeline():
+    return os.path.isfile(os.path.join(HERE, "simple.py")) and os.path.isfile(os.path.join(HERE, "pipeline.py"))
+
+
+def options_to_overrides(traits, moves, extras, glow_hex):
+    """Turn the Options panel into config.yaml overrides for this build."""
+    on = set(extras)
+    hexv = glow_hex.lstrip("#")
+    rgb = [round(int(hexv[i:i + 2], 16) / 255 * 0.85, 2) for i in (0, 2, 4)]
+    ov = {
+        "vtube_studio": {"body_follows_head": "Body follows head" in moves},
+        "extras": {
+            "eye_glow": "Eye glow" in on,
+            "glow_color": rgb,
+            "arm_lift": "Arm up / down hotkeys" in on,
+            "mouth_shapes": "Mouth O / E from microphone" in on,
+            "cheek_puff": "Cheek puff + blush" in on,
+        },
+        "emotes": {"enabled": "Angry, Stunned, DED emotes" in on, "puff": "Cheek puff + blush" in on},
+    }
+    if "animal_ears" in traits:
+        ov["extras"]["ear_motion"] = "Ears move with eyebrows" in on
+    if "tail" in traits:
+        ov["extras"]["tail_swing"] = "Tail sways" in on
+    return ov
 
 
 def default_out_dir():
@@ -154,18 +209,50 @@ def safe_name(name):
 _dialog_lock = threading.Lock()
 
 
-def native_dialog(kind, **kw):
-    """Open a Windows file/folder dialog on top of the browser. Returns a path or ''."""
+def _ps_dialog(kind, title, initialdir, initialfile="", filter_str=""):
+    """Windows file dialogs through PowerShell (ComfyUI's built-in Python has no tkinter)."""
+    q = lambda v: "'" + str(v).replace("'", "''") + "'"
+    if kind == "folder":
+        body = ("$d=New-Object System.Windows.Forms.FolderBrowserDialog;$d.Description=%s;"
+                "$d.SelectedPath=%s;$d.ShowNewFolderButton=$true;"
+                "if($d.ShowDialog($w) -eq 'OK'){[Console]::Out.Write($d.SelectedPath)}" % (q(title), q(initialdir)))
+    else:
+        cls = "SaveFileDialog" if kind == "save" else "OpenFileDialog"
+        body = ("$d=New-Object System.Windows.Forms.%s;$d.Title=%s;$d.InitialDirectory=%s;"
+                "$d.FileName=%s;$d.Filter=%s;"
+                "if($d.ShowDialog($w) -eq 'OK'){[Console]::Out.Write($d.FileName)}"
+                % (cls, q(title), q(initialdir), q(initialfile), q(filter_str)))
+    script = ("Add-Type -AssemblyName System.Windows.Forms;"
+              "$w=New-Object System.Windows.Forms.Form;$w.TopMost=$true;$w.ShowInTaskbar=$false;"
+              "$w.StartPosition='CenterScreen';$w.Size=New-Object System.Drawing.Size(1,1);$w.Show();$w.Activate();"
+              + body + ";$w.Close()")
+    flags = 0x08000000 if sys.platform == "win32" else 0   # CREATE_NO_WINDOW
+    out = subprocess.run(["powershell", "-NoProfile", "-STA", "-Command", script],
+                         capture_output=True, text=True, creationflags=flags)
+    return out.stdout.strip()
+
+
+def native_dialog(kind, title="", initialdir="", initialfile="", image=False, png=False):
+    """Open a file/folder dialog on top of the browser. Returns a path or ''."""
     with _dialog_lock:
+        if sys.platform == "win32":
+            flt = ("Images (*.png;*.jpg;*.jpeg;*.webp)|*.png;*.jpg;*.jpeg;*.webp|All files (*.*)|*.*" if image
+                   else "PNG image (*.png)|*.png" if png else "")
+            return _ps_dialog(kind, title, initialdir, initialfile, flt)
         try:
             import tkinter as tk
             from tkinter import filedialog
         except ImportError:
-            raise RuntimeError("File dialogs need tkinter (included with Python on Windows).")
+            raise RuntimeError("File dialogs need tkinter on this system.")
         root = tk.Tk()
         root.withdraw()
         root.attributes("-topmost", True)
         try:
+            kw = {"title": title, "initialdir": initialdir}
+            if image:
+                kw["filetypes"] = [("Images", "*.png *.jpg *.jpeg *.webp"), ("All files", "*.*")]
+            if kind == "save":
+                kw.update(initialfile=initialfile, defaultextension=".png", filetypes=[("PNG image", "*.png")])
             fn = {"open": filedialog.askopenfilename, "folder": filedialog.askdirectory,
                   "save": filedialog.asksaveasfilename}[kind]
             return fn(parent=root, **kw) or ""
@@ -182,16 +269,6 @@ def open_in_explorer(folder):
         subprocess.Popen(["xdg-open", folder])
 
 
-def load_pipeline():
-    path = os.path.join(HERE, "pipeline.py")
-    if not os.path.isfile(path):
-        return None
-    spec = importlib.util.spec_from_file_location("vtuber_pipeline", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return getattr(module, "run", None)
-
-
 # ------------------------------------------------------------------ app state
 class State:
     def __init__(self):
@@ -202,6 +279,8 @@ class State:
         self.ok = None
         self.message = ""
         self.model_name = ""
+        self.result_zip = ""
+        self.last_ping = time.time()
 
     def add_log(self, msg):
         with self.lock:
@@ -223,43 +302,117 @@ def build_config(body):
     out = (body.get("output_dir") or "").strip()
     if not out or not os.path.isdir(out):
         errors.append("Choose a save folder that exists")
-    allowed = {t for _, items in GROUPS for t in items} - set(SOON)
-    traits = [t for t in body.get("traits", []) if t in allowed]
-    moves = [m for m in body.get("movement", []) if m in dict(MOVES)]
+    traits = [t for t in body.get("traits", []) if t in ALLOWED_TRAITS]
+    if HAS_TRAITS:
+        import traits as T
+        seen = {}
+        for t in traits:
+            ex = T.TRAITS[t].get("exclusive")
+            if ex and ex in seen:
+                errors.append(f"Pick only one of: {T.TRAITS[seen[ex]]['label']} / {T.TRAITS[t]['label']}")
+            elif ex:
+                seen[ex] = t
+    moves = [m for m in body.get("movement", []) if m in dict(MOVES) and m not in MOVES_SOON]
     extras = [e for e in body.get("extras", []) if e in dict(EXTRAS)]
     glow = body.get("eye_glow") if body.get("eye_glow") in dict(GLOWS) else "Green"
     config = {
         "app_version": APP_VERSION,
         "created": datetime.now().isoformat(timespec="seconds"),
         "model_name": name,
+        "display_name": " ".join("".join(c for c in (body.get("name") or "") if c not in '<>:"/\\|?*'
+                                         and ord(c) >= 32).split()) or name,
         "reference_sheet": sheet["path"] if sheet else "",
         "output_dir": os.path.abspath(out) if out else "",
-        "output_zip": os.path.join(os.path.abspath(out), f"{name}.zip") if out and name else "",
         "traits": traits,
         "movement": moves,
         "extras": extras,
         "eye_glow": {"name": glow, "hex": dict(GLOWS)[glow]},
-        # 8 GB GPU: never time out ComfyUI or PSD2Live.
-        "timeouts": {"comfyui": 0, "psd2live": 0},
+        "overrides": options_to_overrides(traits, moves, extras, dict(GLOWS)[glow]),
     }
     return config, errors
 
 
+def _python_for_pipeline():
+    """python.exe next to the running interpreter (pythonw.exe has no console output)."""
+    exe = sys.executable
+    if exe.lower().endswith("pythonw.exe"):
+        alt = exe[:-len("pythonw.exe")] + "python.exe"
+        if os.path.isfile(alt):
+            return alt
+    return exe
+
+
 def run_build(config):
+    name = config["model_name"]
     try:
-        run = load_pipeline()
-        if run:
-            run(config, STATE.add_log)
-            msg = f"Done! Your model is at {config['output_zip']}"
-        else:
-            job = os.path.join(config["output_dir"], f"{config['model_name']}_job.json")
+        if not has_pipeline():
+            job = os.path.join(config["output_dir"], f"{name}_job.json")
             with open(job, "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2)
-            STATE.add_log("No pipeline.py found - dry run only.")
+            STATE.add_log("Pipeline files not found next to the app - dry run only.")
             STATE.add_log(f"Saved job settings: {job}")
-            msg = "Dry run finished - job settings saved"
+            with STATE.lock:
+                STATE.ok, STATE.message, STATE.model_name = True, "Dry run finished - settings saved", name
+            return
+        env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8",
+                   VTUBER_TRAITS=",".join(config["traits"]),
+                   VTUBER_OVERRIDES=json.dumps(config["overrides"]))
+        cmd = [_python_for_pipeline(), "-u", os.path.join(HERE, "simple.py"), config["reference_sheet"],
+               "--name", config.get("display_name") or name]
+        if config["traits"]:
+            cmd += ["--traits", ",".join(config["traits"])]
+        STATE.add_log("Building. ComfyUI opens in its own window - leave it open.")
+        STATE.add_log("The first build also downloads the AI models (about 13 GB).")
+        flags = 0x08000000 if sys.platform == "win32" else 0
+        proc = subprocess.Popen(cmd, cwd=HERE, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                stdin=subprocess.DEVNULL, text=True, encoding="utf-8", errors="replace",
+                                creationflags=flags)
+        result = ""
+        log_path = os.path.join(HERE, "output", f"{name}_build_log.txt")
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        settings_path = os.path.join(HERE, "output", f"{name}_settings.json")
+        with open(settings_path, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=2)
+        # Read output on a side thread: ComfyUI, started by the build in its own window, inherits the
+        # output pipe and keeps it open, so "end of output" never comes. Stop when the build exits.
+        lines = []
+        def reader():
+            for raw in proc.stdout:
+                lines.append(raw)
+        t = threading.Thread(target=reader, daemon=True)
+        t.start()
+        with open(log_path, "w", encoding="utf-8") as logf:
+            def drain():
+                nonlocal result
+                while lines:
+                    line = lines.pop(0).rstrip()
+                    logf.write(line + "\n")
+                    if line.startswith("SUCCESS:"):
+                        result = line[len("SUCCESS:"):].strip()
+                    if line:
+                        STATE.add_log(line)
+                logf.flush()
+            while proc.poll() is None:
+                drain()
+                time.sleep(0.5)
+            t.join(timeout=3)
+            drain()
+        code = proc.returncode
+        if code != 0 or not result:
+            raise RuntimeError(f"The build stopped (code {code}). Full log: {log_path}")
+        final = result
+        if os.path.isfile(result):
+            for src, dst in ((settings_path, "app_settings.json"), (log_path, "app_build_log.txt")):
+                try:
+                    shutil.copyfile(src, os.path.join(os.path.dirname(result), dst))
+                except OSError:
+                    pass
+            final = os.path.join(config["output_dir"], os.path.basename(result))
+            if os.path.abspath(final) != os.path.abspath(result):
+                shutil.copyfile(result, final)
+        STATE.add_log(f"Model saved: {final}")
         with STATE.lock:
-            STATE.ok, STATE.message, STATE.model_name = True, msg, config["model_name"]
+            STATE.ok, STATE.message, STATE.model_name, STATE.result_zip = True, "Done! Your model is ready", name, final
     except Exception as e:  # show any pipeline error in the app
         STATE.add_log(f"Error: {e}")
         with STATE.lock:
@@ -301,15 +454,22 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, UI_HTML.encode(), "text/html; charset=utf-8")
         if path == "/api/config":
             return self._send(200, {
-                "groups": [{"name": n, "items": i} for n, i in GROUPS], "soon": SOON,
-                "moves": MOVES, "extras": EXTRAS, "glows": GLOWS, "issues": ISSUES, "fixes": FIXES,
-                "shares": SHARES, "rules": RULES, "default_out": default_out_dir(),
-                "prompt_intro": PROMPT_INTRO, "prompt_outro": PROMPT_OUTRO, "prompt_lines": PROMPT_LINES,
-                "sheet": STATE.sheet, "version": APP_VERSION})
+                "groups": GROUPS, "moves": MOVES, "moves_soon": MOVES_SOON, "extras": EXTRAS,
+                "glows": GLOWS, "issues": ISSUES, "fixes": FIXES, "shares": SHARES, "rules": RULES,
+                "default_out": default_out_dir(), "prompt_intro": PROMPT_INTRO, "prompt_outro": PROMPT_OUTRO,
+                "prompt_lines": PROMPT_LINES, "sheet": STATE.sheet, "version": APP_VERSION,
+                "pipeline": has_pipeline()})
+        if path == "/api/ping":
+            STATE.last_ping = time.time()
+            return self._send(200, {"app": APP_TITLE})
         if path == "/api/status":
             with STATE.lock:
                 return self._send(200, {"running": STATE.running, "log": STATE.log[-200:], "ok": STATE.ok,
-                                        "message": STATE.message, "model_name": STATE.model_name})
+                                        "message": STATE.message, "model_name": STATE.model_name,
+                                        "result_zip": STATE.result_zip})
+        if path == "/api/latest_model":
+            m = latest_model()
+            return self._send(200, {"name": m["name"], "folder": m["folder"]} if m else {})
         if path == "/api/sheet_preview" and STATE.sheet and os.path.isfile(STATE.sheet["path"]):
             ext = os.path.splitext(STATE.sheet["path"])[1].lower()
             ctype = {".png": "image/png", ".webp": "image/webp"}.get(ext, "image/jpeg")
@@ -330,7 +490,7 @@ class Handler(BaseHTTPRequestHandler):
             handler = {
                 "/api/pick_sheet": self.pick_sheet, "/api/pick_folder": self.pick_folder,
                 "/api/save_template": self.save_template, "/api/open_folder": self.open_folder,
-                "/api/build": self.build,
+                "/api/build": self.build, "/api/claude_kit": self.claude_kit,
             }.get(path)
             if not handler:
                 return self._send(404, {"error": "not found"})
@@ -340,8 +500,7 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---- actions
     def pick_sheet(self, _):
-        p = native_dialog("open", title="Choose your character sheet", initialdir=default_out_dir(),
-                          filetypes=[("Images", "*.png *.jpg *.jpeg *.webp"), ("All files", "*.*")])
+        p = native_dialog("open", title="Choose your character sheet", initialdir=default_out_dir(), image=True)
         if not p:
             return {}
         STATE.sheet = sheet_info(os.path.abspath(p))
@@ -366,19 +525,33 @@ class Handler(BaseHTTPRequestHandler):
         if not os.path.isfile(TEMPLATE):
             return {"error": "The blank template isn't in the templates folder yet"}
         p = native_dialog("save", title="Save the blank template", initialdir=default_out_dir(),
-                          initialfile="VTuber character sheet template.png", defaultextension=".png",
-                          filetypes=[("PNG image", "*.png")])
+                          initialfile="VTuber character sheet template.png", png=True)
         if not p:
             return {}
+        if not p.lower().endswith(".png"):
+            p += ".png"
         shutil.copyfile(TEMPLATE, p)
         return {"message": f"Template saved: {os.path.basename(p)}"}
 
     def open_folder(self, body):
         folder = body.get("folder") or default_out_dir()
+        if body.get("which") == "model" and STATE.result_zip:
+            folder = os.path.dirname(STATE.result_zip)
         if not os.path.isdir(folder):
             return {"error": "That folder doesn't exist"}
         open_in_explorer(folder)
         return {}
+
+    def claude_kit(self, body):
+        m = latest_model()
+        if not m:
+            return {"error": "Build a model first"}
+        problem = (body.get("problem") or "").strip()
+        if not problem:
+            return {"error": "Tell Claude what looks wrong first"}
+        folder, files = make_claude_kit(m, problem, body.get("shares") or [], body.get("rules") or [])
+        open_in_explorer(folder)
+        return {"folder": folder, "files": files, "message": kit_message(m["name"], problem, body.get("rules") or [])}
 
     def build(self, body):
         with STATE.lock:
@@ -388,29 +561,216 @@ class Handler(BaseHTTPRequestHandler):
         if errors:
             return {"errors": errors}
         with STATE.lock:
-            STATE.running, STATE.log, STATE.ok, STATE.message = True, [], None, ""
-        STATE.add_log(f"Starting {config['model_name']}  traits: {', '.join(config['traits']) or 'none'}")
+            STATE.running, STATE.log, STATE.ok, STATE.message, STATE.result_zip = True, [], None, "", ""
+        STATE.add_log(f"Starting {config['display_name']}  traits: {', '.join(config['traits']) or 'none'}")
         threading.Thread(target=run_build, args=(config,), daemon=True).start()
         return {"started": True}
 
 
-def free_port(preferred=8765):
-    for port in (preferred, 0):
-        with socket.socket() as s:
+# ---------------------------------------------------------------- Fix with Claude
+BRIEF = os.path.join(HERE, "FIX_WITH_CLAUDE_BRIEF.md")
+CLAUDE_UPLOAD_LIMIT = 28 * 1024 * 1024   # Claude chat attachments are limited to about 30 MB each
+
+
+def latest_model():
+    """The newest finished model: a build folder under output/ that holds a *_VTubeStudio.zip."""
+    out = os.path.join(HERE, "output")
+    best = None
+    if STATE.result_zip and os.path.isfile(STATE.result_zip):
+        cands = [os.path.dirname(STATE.result_zip)]
+    else:
+        cands = []
+    if os.path.isdir(out):
+        cands += [os.path.join(out, d) for d in os.listdir(out) if os.path.isdir(os.path.join(out, d))]
+    for d in cands:
+        try:
+            zips = [z for z in os.listdir(d) if z.endswith("_VTubeStudio.zip")]
+        except OSError:
+            continue
+        for z in zips:
+            t = os.path.getmtime(os.path.join(d, z))
+            if not best or t > best["time"]:
+                best = {"folder": d, "zip": os.path.join(d, z), "time": t, "name": z[:-len("_VTubeStudio.zip")].replace("_", " ")}
+    return best
+
+
+def _first(folder, *patterns):
+    import glob
+    for pat in patterns:
+        hits = sorted(glob.glob(os.path.join(folder, pat)), key=os.path.getmtime, reverse=True)
+        if hits:
+            return hits[0]
+    return None
+
+
+def _layers_preview(psd_path, dest):
+    """Every layer of the PSD on its own, small and labelled, in one picture."""
+    from psd_tools import PSDImage
+    from PIL import Image, ImageDraw
+    psd = PSDImage.open(psd_path)
+    tiles = []
+    for layer in psd.descendants():
+        if layer.is_group():
+            continue
+        try:
+            im = layer.composite()
+        except Exception:
+            continue
+        if im is None or not im.getbbox():
+            continue
+        im = im.convert("RGBA").crop(im.getbbox())
+        im.thumbnail((240, 240))
+        t = Image.new("RGB", (256, 280), (90, 140, 0))
+        t.paste(im, ((256 - im.width) // 2, 8 + (240 - im.height) // 2), im)
+        ImageDraw.Draw(t).text((6, 260), layer.name[:38], fill="white")
+        tiles.append(t)
+    if not tiles:
+        return False
+    cols = 6
+    sheet = Image.new("RGB", (cols * 260, ((len(tiles) + cols - 1) // cols) * 284), (30, 30, 30))
+    for i, t in enumerate(tiles):
+        sheet.paste(t, ((i % cols) * 260, (i // cols) * 284))
+    sheet.save(dest)
+    return True
+
+
+def make_claude_kit(m, problem, shares, rules):
+    folder, name = m["folder"], m["name"]
+    kit = os.path.join(folder, "Fix with Claude")
+    if os.path.isdir(kit):
+        shutil.rmtree(kit, ignore_errors=True)
+    os.makedirs(kit, exist_ok=True)
+    files, notes = [], []
+
+    def add(src, dst):
+        if src and os.path.isfile(src):
+            if os.path.getsize(src) > CLAUDE_UPLOAD_LIMIT:
+                notes.append(f"{dst} was too big to attach ({os.path.getsize(src) // (1024 * 1024)} MB).")
+                return
+            shutil.copyfile(src, os.path.join(kit, dst))
+            files.append(dst)
+
+    add(BRIEF, "FIX_WITH_CLAUDE_BRIEF.md")
+    add(_first(folder, "app_settings.json") or os.path.join(HERE, "output", f"{name.replace(' ', '_')}_settings.json"), "settings.json")
+    if "Build log" in shares:
+        add(_first(folder, "app_build_log.txt") or os.path.join(HERE, "output", f"{name.replace(' ', '_')}_build_log.txt"), "build_log.txt")
+        add(_first(folder, "warnings.txt"), "warnings.txt")
+    if "Your character sheet" in shares:
+        src = _first(folder, "source.png", "sheet_main.png")
+        if not src:   # older or rebuilt models: the sheet the app last used for this character
             try:
-                s.bind(("127.0.0.1", port))
-                return s.getsockname()[1]
-            except OSError:
-                continue
-    raise RuntimeError("No free port")
+                cfgp = _first(folder, "app_settings.json") or os.path.join(HERE, "output", f"{name.replace(' ', '_')}_settings.json")
+                src = json.load(open(cfgp, encoding="utf-8")).get("reference_sheet")
+            except Exception:
+                src = STATE.sheet["path"] if STATE.sheet else None
+            if src and not os.path.isfile(src):
+                src = None
+        if src:
+            from PIL import Image
+            im = Image.open(src).convert("RGB")
+            im.thumbnail((3072, 3072))
+            im.save(os.path.join(kit, "sheet.png"))
+            files.append("sheet.png")
+    if "The finished VTube Studio model" in shares:
+        psd = _first(folder, os.path.join("artwork", "*.psd"))
+        try:
+            from psd_tools import PSDImage
+            im = PSDImage.open(psd).composite()
+            box = im.getbbox()
+            if box:
+                im = im.crop(box)
+            im.thumbnail((2048, 2048))
+            bg = __import__("PIL.Image", fromlist=["Image"]).new("RGBA", im.size, (90, 140, 0, 255))
+            bg.alpha_composite(im.convert("RGBA"))
+            bg.convert("RGB").save(os.path.join(kit, "model_front.png"))
+            files.append("model_front.png")
+        except Exception:
+            pass
+        add(_first(folder, "emotes_preview.png"), "emotes_preview.png")
+    if "The model's layers (PSD)" in shares:
+        psd = _first(folder, os.path.join("artwork", "*.psd"))
+        if psd:
+            try:
+                if _layers_preview(psd, os.path.join(kit, "layers_preview.png")):
+                    files.append("layers_preview.png")
+            except Exception as e:
+                notes.append(f"Layer pictures could not be made ({e}).")
+            add(psd, os.path.basename(psd))
+    with open(os.path.join(kit, "problem.md"), "w", encoding="utf-8") as f:
+        f.write(f"# What looks wrong with {name}\n\n{problem}\n\n")
+        f.write(f"Model folder on my PC: {folder}\n\n")
+        if rules:
+            f.write("## How I want you to work\n\n" + "".join(f"- {r}\n" for r in rules) + "\n")
+        if notes:
+            f.write("## Notes from the app\n\n" + "".join(f"- {n}\n" for n in notes))
+    files.insert(1, "problem.md")
+    with open(os.path.join(kit, "START HERE.txt"), "w", encoding="utf-8") as f:
+        f.write("1. Open a new chat at claude.ai or in the Claude app.\n"
+                "2. Drag ALL the other files in this folder into the chat.\n"
+                "3. Paste the message below (the app already copied it for you) and send it.\n\n")
+        f.write(kit_message(name, problem, rules))
+    return kit, files
+
+
+def kit_message(name, problem, rules):
+    msg = (f"Hi Claude! I made a VTuber model called {name} with VTuber One-Click and something looks wrong.\n\n"
+           f"What I see: {problem}\n\n"
+           "The attached files are my fix kit. Please read FIX_WITH_CLAUDE_BRIEF.md first (it explains how the tool "
+           "works), then problem.md and the pictures. Tell me in plain words what's causing it and what I should do "
+           "to fix it. If you need a screenshot of something, ask me.")
+    if "Ask me before changing any file" in rules:
+        msg += " Please ask me before changing any file."
+    return msg
+
+
+class AppServer(ThreadingHTTPServer):
+    """Never share a port: on Windows SO_REUSEADDR would let two servers grab the same one."""
+    allow_reuse_address = False
+    daemon_threads = True
+
+    def server_bind(self):
+        if sys.platform == "win32" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
+
+def already_running():
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/api/ping", timeout=2) as r:
+            return json.loads(r.read()).get("app") == APP_TITLE
+    except Exception:
+        return False
+
+
+def watch_idle(server):
+    """Quit once every browser tab is closed (no check-ins) and nothing is building."""
+    while True:
+        time.sleep(15)
+        with STATE.lock:
+            busy = STATE.running
+        if not busy and time.time() - STATE.last_ping > IDLE_EXIT_S:
+            server.shutdown()
+            return
 
 
 def main(open_browser=True):
-    port = free_port()
-    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    url = f"http://127.0.0.1:{port}/"
+    url = f"http://127.0.0.1:{PORT}/"
+    if already_running():           # second launch: just show the open app
+        webbrowser.open(url)
+        return
+    try:
+        server = AppServer(("127.0.0.1", PORT), Handler)
+    except OSError:                 # the usual port is taken by another program: use any free one
+        server = AppServer(("127.0.0.1", 0), Handler)
+        url = f"http://127.0.0.1:{server.server_address[1]}/"
     print(f"{APP_TITLE} {APP_VERSION} is running at {url}")
-    print("Keep this window open while you use the app. Close it to quit.")
+    try:
+        with open(os.path.join(HERE, "app_address.txt"), "w", encoding="utf-8") as f:
+            f.write(url + "\n")
+    except OSError:
+        pass
+    print("Close the app's browser tab to quit (it stops by itself a few minutes later).")
+    threading.Thread(target=watch_idle, args=(server,), daemon=True).start()
     if open_browser:
         threading.Timer(0.6, webbrowser.open, args=(url,)).start()
     try:
@@ -610,7 +970,7 @@ legend{padding:0 6px;font-weight:700;font-size:13px;color:var(--lav)}
     <div style="font-size:18px;font-weight:800" id="claudeName">No model built yet</div>
     <div style="height:1px;background:var(--line)"></div>
     <div class="h">Claude</div>
-    <div class="sub">Needs the Claude desktop app, signed in with your own account. Fixes use your Claude plan. Claude only gets the one model folder you share, never the rest of your PC.</div>
+    <div class="sub">Works with your own Claude account, on claude.ai or in the Claude app. Claude only sees the files you drag into the chat, never the rest of your PC.</div>
     <div class="grow"></div>
     <button type="button" class="btn" id="openFolder2">Open model folder</button>
   </div>
@@ -629,9 +989,9 @@ legend{padding:0 6px;font-weight:700;font-size:13px;color:var(--lav)}
     <div class="h" style="margin-top:6px">How Claude works</div>
     <div id="rules"></div>
     <div class="grow"></div>
-    <div class="sub">Opens a chat in the Claude desktop app with everything above attached. You can keep talking to Claude there until it looks right.</div>
-    <button type="button" class="big" disabled>Fix with Claude</button>
-    <div class="sub center">Coming soon. Your current model is kept; the fixed one is saved next to it.</div>
+    <div class="sub">Makes a <b>Fix with Claude</b> folder next to your model and copies a message for you. Drag the files into a Claude chat, paste the message, and keep talking until it looks right.</div>
+    <button type="button" class="big" id="claudeBtn">Fix with Claude</button>
+    <div class="sub center" id="claudeNote">Uses your own Claude account. Your current model is never changed.</div>
   </div>
 </div>
 
@@ -647,8 +1007,8 @@ async function api(path, body, raw) {
   const opt = body === undefined ? {} : { method: 'POST', body: raw ? body : JSON.stringify(body), headers: raw || {} };
   const r = await fetch(path, opt); return r.json();
 }
-function optRow(name, label, on, soon) {
-  return `<label class="opt${soon ? ' soon' : ''}"><input type="checkbox" name="${esc(name)}" value="${esc(label)}"${on ? ' checked' : ''}${soon ? ' disabled' : ''}><span class="t">${esc(label)}</span>${soon ? '<span class="pill">soon</span>' : ''}</label>`;
+function optRow(name, label, on, soon, value, ex) {
+  return `<label class="opt${soon ? ' soon' : ''}"><input type="checkbox" name="${esc(name)}" value="${esc(value ?? label)}"${ex ? ` data-ex="${esc(ex)}"` : ''}${on ? ' checked' : ''}${soon ? ' disabled' : ''}><span class="t">${esc(label)}</span>${soon ? '<span class="pill">soon</span>' : ''}</label>`;
 }
 function ticked(name) { return [...document.querySelectorAll(`input[name="${name}"]:checked`)].map((i) => i.value); }
 
@@ -662,16 +1022,22 @@ document.querySelectorAll('[data-page],[data-goto]').forEach((b) => b.addEventLi
 // ---------- render from config
 function render() {
   $('groups').innerHTML = cfg.groups.map((g) => `<fieldset><legend>${esc(g.name)}</legend><div style="display:flex;flex-direction:column;gap:2px">${
-    g.items.map((t) => optRow('trait', t, false, cfg.soon.includes(t))).join('')}</div></fieldset>`).join('');
-  $('moves').innerHTML = cfg.moves.map(([l, on]) => optRow('move', l, on)).join('');
+    g.items.map((t) => optRow('trait', t.label, false, t.soon, t.key, t.exclusive)).join('')}</div></fieldset>`).join('');
+  $('moves').innerHTML = cfg.moves.map(([l, on]) => optRow('move', l, on && !cfg.moves_soon.includes(l), cfg.moves_soon.includes(l))).join('');
   $('extras').innerHTML = cfg.extras.map(([l, on]) => optRow('extra', l, on)).join('');
   $('glows').innerHTML = cfg.glows.map(([n, hex]) => `<button type="button" class="sw${n === glow ? ' on' : ''}" aria-label="${esc(n)}" title="${esc(n)}" data-glow="${esc(n)}" style="background:${hex}"></button>`).join('');
   $('issues').innerHTML = cfg.issues.map(([l, d]) => `<label class="issue"><input type="checkbox" name="issue" value="${esc(l)}"><span><b>${esc(l)}</b><small>${esc(d)}</small></span></label>`).join('');
   $('shares').innerHTML = cfg.shares.map((l) => optRow('share', l, true)).join('');
   $('rules').innerHTML = cfg.rules.map(([l, on]) => optRow('rule', l, on)).join('');
   $('savef').value = cfg.default_out;
+  if (!cfg.pipeline) $('buildNote').textContent = 'Pipeline not installed: Build only saves your settings (dry run).';
   renderFix();
 }
+$('groups').addEventListener('change', (e) => {   // one hair length, one ear type...
+  const ex = e.target.dataset.ex;
+  if (!ex || !e.target.checked) return;
+  document.querySelectorAll(`input[data-ex="${ex}"]`).forEach((i) => { if (i !== e.target) i.checked = false; });
+});
 $('glows').addEventListener('click', (e) => {
   const b = e.target.closest('[data-glow]'); if (!b) return;
   glow = b.dataset.glow; document.querySelectorAll('.sw').forEach((s) => s.classList.toggle('on', s.dataset.glow === glow));
@@ -712,25 +1078,27 @@ $('drop').addEventListener('drop', async (e) => {
 // ---------- prompt + template
 $('copyPrompt').addEventListener('click', async () => {
   const traits = ticked('trait');
-  const lines = [cfg.prompt_intro, ...traits.map((t) => '- ' + (cfg.prompt_lines[t] || `The character has: ${t.toLowerCase()}.`))];
-  if (!traits.length) lines.push('- (Tick traits in the app to add lines here.)');
-  lines.push(cfg.prompt_outro);
+  const lines = [cfg.prompt_intro, ...traits.map((t) => cfg.prompt_lines[t]).filter(Boolean)];
+  if (cfg.prompt_outro) lines.push(cfg.prompt_outro);
   const text = lines.join('\n');
   try { await navigator.clipboard.writeText(text); toast('Prompt copied'); }
   catch { const ta = document.createElement('textarea'); ta.value = text; document.body.append(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast('Prompt copied'); }
 });
 $('saveTemplate').addEventListener('click', async () => { const r = await api('/api/save_template', {}); toast(r.message || r.error); });
 $('browseOut').addEventListener('click', async () => { const r = await api('/api/pick_folder', {}); if (r.folder) $('savef').value = r.folder; });
-['openFolder1', 'openFolder2'].forEach((id) => $(id).addEventListener('click', async () => { const r = await api('/api/open_folder', { folder: $('savef').value }); if (r.error) toast(r.error); }));
+['openFolder1', 'openFolder2'].forEach((id) => $(id).addEventListener('click', async () => { const r = await api('/api/open_folder', { folder: $('savef').value, which: 'model' }); if (r.error) toast(r.error); }));
 
 // ---------- build
 $('buildBtn').addEventListener('click', async () => {
   const body = { name: $('cname').value, traits: ticked('trait'), movement: ticked('move'), extras: ticked('extra'), eye_glow: glow, output_dir: $('savef').value };
   const r = await api('/api/build', body);
   if (r.errors) { toast(r.errors.join(' · ')); return; }
-  $('buildBtn').disabled = true; $('bar').style.display = 'block'; $('log').style.display = 'block'; $('log').textContent = '';
-  polling = setInterval(poll, 1000); poll();
+  startPolling();
 });
+function startPolling() {
+  $('buildBtn').disabled = true; $('bar').style.display = 'block'; $('log').style.display = 'block';
+  clearInterval(polling); polling = setInterval(poll, 1500); poll();
+}
 async function poll() {
   const s = await api('/api/status');
   $('log').textContent = s.log.join('\n'); $('log').scrollTop = 1e9;
@@ -741,7 +1109,31 @@ async function poll() {
   }
 }
 
-api('/api/config').then((c) => { cfg = c; render(); if (c.sheet) showSheet(c.sheet); });
+// ---------- fix with Claude
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; }
+  catch { const ta = document.createElement('textarea'); ta.value = text; document.body.append(ta); ta.select(); const ok = document.execCommand('copy'); ta.remove(); return ok; }
+}
+$('claudeBtn').addEventListener('click', async () => {
+  const problem = $('ask').value.trim();
+  if (!problem) { toast('Tell Claude what looks wrong first'); $('ask').focus(); return; }
+  $('claudeBtn').disabled = true; $('claudeNote').textContent = 'Making your fix kit...';
+  const r = await api('/api/claude_kit', { problem, shares: ticked('share'), rules: ticked('rule') });
+  $('claudeBtn').disabled = false;
+  if (r.error) { toast(r.error); $('claudeNote').textContent = r.error; return; }
+  const copied = await copyText(r.message);
+  $('claudeNote').innerHTML = `Done. The <b>Fix with Claude</b> folder is open. Drag its files into a new Claude chat, then ${copied ? 'paste (Ctrl+V)' : 'copy the message from START HERE.txt'} and send.`;
+  toast(copied ? 'Message copied. Drag the files into Claude, then paste' : 'Kit ready');
+});
+api('/api/latest_model').then((m) => { if (m.name) $('claudeName').textContent = m.name; });
+
+api('/api/config').then(async (c) => {
+  cfg = c; render(); if (c.sheet) showSheet(c.sheet);
+  const s = await api('/api/status');            // reopened while a build runs: show it
+  if (s.running) startPolling();
+  else if (s.model_name && s.ok) { $('fixName').textContent = s.model_name; $('claudeName').textContent = s.model_name; }
+});
+setInterval(() => fetch('/api/ping').catch(() => {}), 20000); fetch('/api/ping');
 </script>
 </body>
 </html>
