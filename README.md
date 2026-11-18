@@ -4,20 +4,20 @@ Turn one picture of your character into a moving VTuber model for **VTube Studio
 
 ![Example character sheet: Legal Elf](examples/Legal_Elf_Template.jpg)
 
-## Example: Legal Elf
+## Examples
 
-The sheet above, built with this tool and running in VTube Studio:
+Models built with this tool, running in VTube Studio. Legal Elf is made from the sheet above:
 
 <p>
-<img src="examples/02_full_body.jpg" height="320" alt="Full body in VTube Studio">
-<img src="examples/01_in_vtube_studio.jpg" height="320" alt="Waist up in VTube Studio">
+<img src="examples/02_full_body.jpg" height="320" alt="Legal Elf, full body">
+<img src="examples/05_talking.jpg" height="320" alt="Legal Elf talking">
+<img src="examples/06_laughing.jpg" height="320" alt="Legal Elf laughing">
 </p>
 <p>
-<img src="examples/03_neutral.jpg" height="200" alt="Neutral">
-<img src="examples/04_smile.jpg" height="200" alt="Smile">
-<img src="examples/05_talking.jpg" height="200" alt="Talking">
-<img src="examples/06_laughing.jpg" height="200" alt="Laughing">
-<img src="examples/07_head_tilt.jpg" height="200" alt="Head tilt">
+<img src="examples/08_kari_full.jpg" height="260" alt="Kari">
+<img src="examples/09_kari_closeup.jpg" height="260" alt="Kari close-up">
+<img src="examples/10_cat_smile.jpg" height="260" alt="Cat character smiling">
+<img src="examples/11_cat_talking.jpg" height="260" alt="Cat character talking">
 </p>
 
 > Status: **alpha**. It works, but expect some rough edges. Long hair, ponytails, dresses and wings are not supported yet. See what's new in the **[changelog](CHANGELOG.md)**.
