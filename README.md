@@ -44,6 +44,10 @@ You now have a **VTuber One-Click** icon on your Desktop.
 
 The app needs one picture laid out in a special way, called a **character sheet**.
 
+![The VTuber One-Click app: tick what your character has, then click Copy ChatGPT prompt](examples/app_ui.jpg)
+
+*The app. Tick what your character has (middle column), then click **Copy ChatGPT prompt** (bottom left).*
+
 1. Download the blank template: **[VTuber_Sheet_Template_BLANK.png](examples/VTuber_Sheet_Template_BLANK.png)**
    (the app's **Save blank template** button gives you the same file).
 2. Look at the finished example so you know what to aim for: **[Legal_Elf_Template.jpg](examples/Legal_Elf_Template.jpg)**
