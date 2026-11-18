@@ -85,35 +85,34 @@ Your model comes with blinking, mouth movement, head turns, hair physics and exp
 
 ![The Fix with Claude screen in the app](examples/app_fix_with_claude.jpg)
 
+### Steps
+
 1. Open the app and click the **Fix with Claude** tab (top right).
 2. Under **Tell Claude what looks wrong**, describe the problem in your own words.
    For example: *"When I turn my head there is a ring of spiky hair with white edges around the back of my head."*
 3. Leave the boxes under **What Claude gets** ticked and click **Fix with Claude**.
-4. A **Fix with Claude** folder opens next to your model, and a message is copied for you.
-5. Open a new chat at [claude.ai](https://claude.ai) or in the Claude app, drag in **all the files** from that folder,
-   then paste (**Ctrl+V**) and send.
+4. A **Fix with Claude** folder opens (it is saved in your model's build folder), and a message is copied for you.
+5. Open a new chat at [claude.ai](https://claude.ai) or in the Claude app and drag in **all the files** from that folder.
+6. Paste the message (**Ctrl+V**) and send. Keep chatting until it looks right.
 
 The folder includes a short project brief, so Claude already knows how the tool works, what usually goes wrong
-and how to rebuild quickly. It also gets your settings, the build log, your sheet and pictures of your model and
-its layers. Keep chatting until it looks right.
-
-You need your own Claude account (any plan). Claude only sees the files you drag into the chat, and your current
-model is never changed.
+and how to rebuild quickly. You need your own Claude account (any plan). Claude only sees the files you drag into
+the chat, and your current model is never changed.
 
 Full guide with tips and troubleshooting: **[How to fix your model with Claude](FIX_WITH_CLAUDE.md)**
+
+### All other problems
+
+For anything Fix with Claude can't solve, or a problem with the app itself (installing, building, the app not
+opening), please report it on the **[Issues page](https://github.com/legalelfVT/Vtuber-1-Click-2D-Model-Creator/issues)**.
+Click **New issue**, say what happened and what you expected, and attach a screenshot and your build log
+(`output\<name>_build_log.txt` in your install folder) if you have them.
 
 ## Tips
 
 - Clean, simple drawings work best: front view, plain background, no text inside the boxes.
 - Draw the open mouth smaller than its grey box, with space around it.
 - If something looks wrong, build again with a better sheet. The app keeps your old model.
-
-## Other problems? Report them
-
-For anything Fix with Claude can't solve, or a problem with the app itself (installing, building, the app not
-opening), please report it on the **[Issues page](https://github.com/legalelfVT/Vtuber-1-Click-2D-Model-Creator/issues)**.
-Click **New issue**, say what happened and what you expected, and attach a screenshot and your build log
-(`output\<name>_build_log.txt` in your install folder) if you have them.
 
 ## Uninstall
 
