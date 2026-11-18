@@ -100,11 +100,20 @@ its layers. Keep chatting until it looks right.
 You need your own Claude account (any plan). Claude only sees the files you drag into the chat, and your current
 model is never changed.
 
+Full guide with tips and troubleshooting: **[How to fix your model with Claude](FIX_WITH_CLAUDE.md)**
+
 ## Tips
 
 - Clean, simple drawings work best: front view, plain background, no text inside the boxes.
 - Draw the open mouth smaller than its grey box, with space around it.
 - If something looks wrong, build again with a better sheet. The app keeps your old model.
+
+## Other problems? Report them
+
+For anything Fix with Claude can't solve, or a problem with the app itself (installing, building, the app not
+opening), please report it on the **[Issues page](https://github.com/legalelfVT/Vtuber-1-Click-2D-Model-Creator/issues)**.
+Click **New issue**, say what happened and what you expected, and attach a screenshot and your build log
+(`output\<name>_build_log.txt` in your install folder) if you have them.
 
 ## Uninstall
 
