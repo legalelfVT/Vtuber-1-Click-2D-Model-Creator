@@ -32,8 +32,8 @@ Models built with this tool, running in VTube Studio. Legal Elf is made from the
 
 ## Step 1: Install
 
-1. Download **VTuber One-Click Setup.exe**.
-2. Double-click it and click **Next**.
+1. Download **[VTuber-One-Click-Setup.exe](https://github.com/legalelfVT/Vtuber-1-Click-2D-Model-Creator/releases/latest/download/VTuber-One-Click-Setup.exe)** (Windows, about 12 MB). All versions are on the **[Releases page](https://github.com/legalelfVT/Vtuber-1-Click-2D-Model-Creator/releases)**.
+2. Double-click it and click **Next**. If Windows says "Windows protected your PC", click **More info**, then **Run anyway**. The installer isn't code-signed yet.
 3. Pick a folder (the suggested `C:\VTuberOneClick` is fine) and click **Install**.
 4. Wait about 10 to 20 minutes while it downloads everything. Then click **Finish**.
 
