@@ -29,7 +29,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlparse
 
 APP_TITLE = "VTuber One-Click"
-APP_VERSION = "0.3.1-alpha"
+APP_VERSION = "0.3.2-alpha"
 HERE = os.path.dirname(os.path.abspath(__file__))
 WORK_DIR = os.path.join(os.path.expanduser("~"), "VTuber One-Click")
 TEMPLATE = os.path.join(HERE, "vtuber_sheet_template.png")
