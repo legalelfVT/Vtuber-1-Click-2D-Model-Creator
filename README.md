@@ -20,7 +20,7 @@ The sheet above, built with this tool and running in VTube Studio:
 <img src="examples/07_head_tilt.jpg" height="200" alt="Head tilt">
 </p>
 
-> Status: **alpha**. It works, but expect some rough edges. Long hair, ponytails, dresses and wings are not supported yet.
+> Status: **alpha**. It works, but expect some rough edges. Long hair, ponytails, dresses and wings are not supported yet. See what's new in the **[changelog](CHANGELOG.md)**.
 
 ---
 
