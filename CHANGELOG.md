@@ -2,10 +2,10 @@
 
 What changed in each version of VTuber One-Click, newest first.
 
-## Next installer (0.3.2, not released yet)
+## 0.3.2 (2026-11-18)
 
 - **Faces keep their shading.** Faces no longer come out flat white. The skin you can see keeps the soft shading
-  from your sheet, and only the skin hidden under the eyes and mouth is filled in.
+  from your sheet, and only the skin hidden under the eyes and mouth is filled in. This helps every character, whatever the hair.
 
 ## 0.3.1 (2026-11-17)
 
