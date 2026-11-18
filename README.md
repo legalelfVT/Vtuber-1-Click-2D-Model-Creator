@@ -81,6 +81,25 @@ very first build also downloads the AI models (about 13 GB). When it is done, th
 Your model comes with blinking, mouth movement, head turns, hair physics and expressions
 (Eye Glow, Angry, Stunned, DED) that you can put on hotkeys.
 
+## Something looks wrong? Fix it with Claude
+
+![The Fix with Claude screen in the app](examples/app_fix_with_claude.jpg)
+
+1. Open the app and click the **Fix with Claude** tab (top right).
+2. Under **Tell Claude what looks wrong**, describe the problem in your own words.
+   For example: *"When I turn my head there is a ring of spiky hair with white edges around the back of my head."*
+3. Leave the boxes under **What Claude gets** ticked and click **Fix with Claude**.
+4. A **Fix with Claude** folder opens next to your model, and a message is copied for you.
+5. Open a new chat at [claude.ai](https://claude.ai) or in the Claude app, drag in **all the files** from that folder,
+   then paste (**Ctrl+V**) and send.
+
+The folder includes a short project brief, so Claude already knows how the tool works, what usually goes wrong
+and how to rebuild quickly. It also gets your settings, the build log, your sheet and pictures of your model and
+its layers. Keep chatting until it looks right.
+
+You need your own Claude account (any plan). Claude only sees the files you drag into the chat, and your current
+model is never changed.
+
 ## Tips
 
 - Clean, simple drawings work best: front view, plain background, no text inside the boxes.
