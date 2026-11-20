@@ -2,6 +2,15 @@
 
 What changed in each version of VTuber One-Click, newest first.
 
+## Unreleased (2026-11-20)
+
+- **Grey template.** The two big boxes on the blank character sheet are now flat grey instead of white.
+  White clothes, aprons, tights, frills, fur and white or silver hair no longer blend into a white page,
+  so they don't get cut out as background. The app measures each sheet's background colour, so sheets
+  made on the old white template still work.
+- Still being tested with the current app. If a grey sheet gives you trouble, use the white one for now
+  and please report it on the Issues page.
+
 ## 0.3.2 (2026-11-18)
 
 - **Faces keep their shading.** Faces no longer come out flat white. The skin you can see keeps the soft shading
