@@ -29,7 +29,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlparse
 
 APP_TITLE = "VTuber One-Click"
-APP_VERSION = "0.3.2-alpha"
+APP_VERSION = "0.3.5-alpha"
 HERE = os.path.dirname(os.path.abspath(__file__))
 WORK_DIR = os.path.join(os.path.expanduser("~"), "VTuber One-Click")
 TEMPLATE = os.path.join(HERE, "vtuber_sheet_template.png")
@@ -56,7 +56,7 @@ FORCE_SOON = {"long_hair", "Long hair"}
 
 MOVES = [("Body follows head", True), ("Bigger mouth", False), ("Big eyebrow movement", False)]
 MOVES_SOON = ["Bigger mouth", "Big eyebrow movement"]
-EXTRAS = [("Ears move with eyebrows", True), ("Eye glow", True), ("Angry, Stunned, DED emotes", True),
+EXTRAS = [("Ears move with eyebrows", True), ("Eye glow", True), ("Emotes (Angry, Love, Shocked and more)", True),
           ("Arm up / down hotkeys", True), ("Mouth O / E from microphone", True),
           ("Cheek puff + blush", False), ("Tail sways", True)]
 GLOWS = [("Green", "#4ADE80"), ("Red", "#F87171"), ("Purple", "#C084FC"), ("Pink", "#F472B6"),
@@ -139,7 +139,7 @@ def options_to_overrides(traits, moves, extras, glow_hex):
             "mouth_shapes": "Mouth O / E from microphone" in on,
             "cheek_puff": "Cheek puff + blush" in on,
         },
-        "emotes": {"enabled": "Angry, Stunned, DED emotes" in on, "puff": "Cheek puff + blush" in on},
+        "emotes": {"enabled": "Emotes (Angry, Love, Shocked and more)" in on, "puff": "Cheek puff + blush" in on},
     }
     if "animal_ears" in traits:
         ov["extras"]["ear_motion"] = "Ears move with eyebrows" in on
@@ -655,6 +655,7 @@ def make_claude_kit(m, problem, shares, rules):
     if "Build log" in shares:
         add(_first(folder, "app_build_log.txt") or os.path.join(HERE, "output", f"{name.replace(' ', '_')}_build_log.txt"), "build_log.txt")
         add(_first(folder, "warnings.txt"), "warnings.txt")
+        add(_first(folder, "gap_check.png"), "gap_check.png")      # where head turns open gaps
     if "Your character sheet" in shares:
         src = _first(folder, "source.png", "sheet_main.png")
         if not src:   # older or rebuilt models: the sheet the app last used for this character

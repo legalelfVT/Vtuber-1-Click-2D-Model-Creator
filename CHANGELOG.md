@@ -2,6 +2,33 @@
 
 What changed in each version of VTuber One-Click, newest first.
 
+## 0.3.5 (2026-11-23)
+
+- **Fix with Claude knows the new parts.** The brief that comes with the Fix with Claude folder now covers the
+  layered mouth, all the emotes, how skirts and legs are handled, and how long hair works (the four pictures it
+  needs and how the hair is fitted), plus faster ways to redo only the rigging (a few minutes), only the emotes
+  (about 3 minutes) or a quick mouth check (about 1 minute).
+- Long hair is still turned off in the app.
+
+## 0.3.4 (2026-11-23)
+
+- **Better mouth.** The open mouth is now built in layers like a hand-rigged model: the inside of the
+  mouth, the upper teeth, the lower teeth and the tongue are separate, so the teeth slide apart as the
+  mouth opens instead of one picture being squashed. Smiles get wider and frowns narrower (an open
+  frown reads as an "o"), and the closed mouth is a little smaller than the open one.
+- **More emotes.** Besides Angry, Stunned and DED there are now **Love** (heart eyes and a blush),
+  **Shocked** (blank round eyes and a small "o" mouth), **Frustrated** (`><` eyes and a wavy mouth) and
+  **Grossed Out** (purple face and gritted teeth). Each one gets a hotkey in VTube Studio.
+- **Angry is redone.** The anger mark sits on the head, the face gets a light red flush, and the mouth
+  shows gritted teeth.
+- **Emotes replace the face parts they draw.** When an emote draws its own eyes or mouth, the normal
+  eyes or mouth are hidden while it shows, so you never see both at once.
+- **Complete jaw.** If the sides of the face came out ragged, the jaw line is rebuilt from your sheet's
+  close-up, so the face has a clean outline from the cheeks to the chin.
+- **Gap check.** Before rigging, the app slides the head as if turning and saves `gap_check.png` in the
+  model's build folder, showing where holes could open on head turns. It is added to the Fix with Claude folder.
+- Long hair is still turned off in the app.
+
 ## 0.3.3 (2026-11-20)
 
 - **Grey templates.** The blank character sheet and the hair pages that come with the app (and the

@@ -78,7 +78,7 @@ very first build also downloads the AI models (about 13 GB). When it is done, th
 3. Open VTube Studio and pick your model.
 
 Your model comes with blinking, mouth movement, head turns, hair physics and expressions
-(Eye Glow, Angry, Stunned, DED) that you can put on hotkeys.
+(Eye Glow, Angry, Stunned, DED, Love, Shocked, Frustrated, Grossed Out) that you can put on hotkeys.
 
 ## Something looks wrong? Fix it with Claude
 
