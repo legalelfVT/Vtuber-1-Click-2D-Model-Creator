@@ -19,7 +19,7 @@ Models built with this tool, running in VTube Studio. Legal Elf is made from the
 <img src="examples/11_cat_talking.jpg" height="260" alt="Cat character talking">
 </p>
 
-> Status: **alpha**. It works, but expect some rough edges. Long hair, ponytails, dresses and wings are not supported yet. See what's new in the **[changelog](CHANGELOG.md)**.
+> Status: **alpha**. It works, but expect some rough edges. Long hair and dresses are supported (long hair needs three extra pictures: see **VTuber One-Click Guide.pdf**, installed with the app). Ponytails and wings are not supported yet. See what's new in the **[changelog](CHANGELOG.md)**.
 
 ---
 
@@ -64,7 +64,11 @@ The app needs one picture laid out in a special way, called a **character sheet*
 1. Double-click **VTuber One-Click** on your Desktop. It opens in your web browser.
 2. Type your character's **name**.
 3. Click the sheet box and choose your character sheet.
-4. Tick everything your character has (hair, ears, horns, coat, tail...).
+4. Tick everything your character has (hair, ears, horns, coat, tail...), and under **Legs** pick one:
+   **Skirt / dress**, **Shorts** or **Pants**.
+   **Long hair:** ticking **Long hair** opens three more boxes. Put the **bald sheet** in the sheet box and the
+   **sheet with hair**, **hair page** and **front hair + headwear page** in the new boxes (all 3072 x 2048).
+   The guide shows how to make them with ChatGPT; **Save hair templates** gives you the templates.
 5. Choose where to save the model, then click **Build**.
 
 A black **ComfyUI** window opens. Leave it open. Building takes **1 to 2 hours** on an 8 GB card, and the

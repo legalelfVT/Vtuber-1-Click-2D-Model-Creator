@@ -26,13 +26,21 @@ import urllib.request
 import webbrowser
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 APP_TITLE = "VTuber One-Click"
-APP_VERSION = "0.3.5-alpha"
+APP_VERSION = "Alpha 1.55"
 HERE = os.path.dirname(os.path.abspath(__file__))
 WORK_DIR = os.path.join(os.path.expanduser("~"), "VTuber One-Click")
 TEMPLATE = os.path.join(HERE, "vtuber_sheet_template.png")
+HAIR_TEMPLATES = [("vtuber_hair_template.png", "VTuber hair page template.png"),
+                  ("vtuber_hair_front_template.png", "VTuber front hair + headwear template.png")]
+GUIDE = os.path.join(HERE, "VTuber One-Click Guide.pdf")
+# Long hair: three more pictures besides the bald sheet, saved next to it under the names the
+# pipeline looks for (<name>_sheet / _hair / _hair_front)
+PAGE_KINDS = {"sheet": ("Sheet with hair", "_sheet"),
+              "hair": ("Hair page", "_hair"),
+              "front": ("Front hair + headwear page", "_hair_front")}
 PORT = 8765
 IDLE_EXIT_S = 180   # quit when no browser tab has checked in for this long (and no build runs)
 IMAGE_EXT = (".png", ".jpg", ".jpeg", ".webp")
@@ -52,7 +60,7 @@ FALLBACK_GROUPS = [
     ("Body", ["Tattoos", "Tail", "Wings"]),
 ]
 # Turned off in the app for now, even where the pipeline has basic handling.
-FORCE_SOON = {"long_hair", "Long hair"}
+FORCE_SOON = set()                      # long hair is on from Alpha 1.55
 
 MOVES = [("Body follows head", True), ("Bigger mouth", False), ("Big eyebrow movement", False)]
 MOVES_SOON = ["Bigger mouth", "Big eyebrow movement"]
@@ -274,6 +282,7 @@ class State:
     def __init__(self):
         self.lock = threading.Lock()
         self.sheet = None
+        self.pages = {}                     # long hair: kind -> sheet_info of that picture
         self.running = False
         self.log = []
         self.ok = None
@@ -312,6 +321,21 @@ def build_config(body):
                 errors.append(f"Pick only one of: {T.TRAITS[seen[ex]]['label']} / {T.TRAITS[t]['label']}")
             elif ex:
                 seen[ex] = t
+        if "lower" not in seen and any(v.get("exclusive") == "lower" for v in T.TRAITS.values()):
+            errors.append("Pick what the legs wear: Skirt / dress, Shorts or Pants")
+    long_hair = "long_hair" in traits
+    if long_hair:
+        # the bald sheet (hair removed) is the main sheet; the other three are required, all the
+        # same size as it (they line up 1:1 with the sheet)
+        for kind, (label, _) in PAGE_KINDS.items():
+            pg = STATE.pages.get(kind)
+            if not pg or not os.path.isfile(pg["path"]):
+                errors.append(f"Long hair: add the {label.lower()}")
+            elif sheet and sheet.get("width") and pg.get("width") and \
+                    (pg["width"], pg["height"]) != (sheet["width"], sheet["height"]):
+                errors.append(f"Long hair: the {label.lower()} is {pg['width']} x {pg['height']}, the bald sheet "
+                              f"{sheet['width']} x {sheet['height']}. All four pictures must be the same size "
+                              "(3072 x 2048)")
     moves = [m for m in body.get("movement", []) if m in dict(MOVES) and m not in MOVES_SOON]
     extras = [e for e in body.get("extras", []) if e in dict(EXTRAS)]
     glow = body.get("eye_glow") if body.get("eye_glow") in dict(GLOWS) else "Green"
@@ -322,6 +346,7 @@ def build_config(body):
         "display_name": " ".join("".join(c for c in (body.get("name") or "") if c not in '<>:"/\\|?*'
                                          and ord(c) >= 32).split()) or name,
         "reference_sheet": sheet["path"] if sheet else "",
+        "long_hair_pages": {k: STATE.pages[k]["path"] for k in PAGE_KINDS} if long_hair and not errors else {},
         "output_dir": os.path.abspath(out) if out else "",
         "traits": traits,
         "movement": moves,
@@ -342,6 +367,22 @@ def _python_for_pipeline():
     return exe
 
 
+def gather_long_hair(name, bald, pages):
+    """The four long-hair pictures in one folder, named the way the pipeline finds them:
+    <name>.png (bald sheet), <name>_sheet, <name>_hair, <name>_hair_front."""
+    folder = os.path.join(WORK_DIR, "long_hair", name)
+    os.makedirs(folder, exist_ok=True)
+    for f in os.listdir(folder):                    # pictures from an earlier build of this name
+        if f.lower().endswith(IMAGE_EXT):
+            os.remove(os.path.join(folder, f))
+    dest = os.path.join(folder, name + os.path.splitext(bald)[1].lower())
+    shutil.copyfile(bald, dest)
+    for kind, (_, suffix) in PAGE_KINDS.items():
+        src = pages[kind]
+        shutil.copyfile(src, os.path.join(folder, name + suffix + os.path.splitext(src)[1].lower()))
+    return dest
+
+
 def run_build(config):
     name = config["model_name"]
     try:
@@ -357,7 +398,11 @@ def run_build(config):
         env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8",
                    VTUBER_TRAITS=",".join(config["traits"]),
                    VTUBER_OVERRIDES=json.dumps(config["overrides"]))
-        cmd = [_python_for_pipeline(), "-u", os.path.join(HERE, "simple.py"), config["reference_sheet"],
+        sheet_path = config["reference_sheet"]
+        if config.get("long_hair_pages"):
+            sheet_path = gather_long_hair(name, sheet_path, config["long_hair_pages"])
+            STATE.add_log("Long hair: bald sheet, sheet with hair, hair page and front hair page are ready.")
+        cmd = [_python_for_pipeline(), "-u", os.path.join(HERE, "simple.py"), sheet_path,
                "--name", config.get("display_name") or name]
         if config["traits"]:
             cmd += ["--traits", ",".join(config["traits"])]
@@ -458,6 +503,7 @@ class Handler(BaseHTTPRequestHandler):
                 "glows": GLOWS, "issues": ISSUES, "fixes": FIXES, "shares": SHARES, "rules": RULES,
                 "default_out": default_out_dir(), "prompt_intro": PROMPT_INTRO, "prompt_outro": PROMPT_OUTRO,
                 "prompt_lines": PROMPT_LINES, "sheet": STATE.sheet, "version": APP_VERSION,
+                "pages": STATE.pages, "page_kinds": {k: v[0] for k, v in PAGE_KINDS.items()},
                 "pipeline": has_pipeline()})
         if path == "/api/ping":
             STATE.last_ping = time.time()
@@ -470,6 +516,15 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/latest_model":
             m = latest_model()
             return self._send(200, {"name": m["name"], "folder": m["folder"]} if m else {})
+        if path == "/api/page_preview":
+            kind = (parse_qs(urlparse(self.path).query).get("which") or [""])[0]
+            pg = STATE.pages.get(kind)
+            if pg and os.path.isfile(pg["path"]):
+                ext = os.path.splitext(pg["path"])[1].lower()
+                ctype = {".png": "image/png", ".webp": "image/webp"}.get(ext, "image/jpeg")
+                with open(pg["path"], "rb") as f:
+                    return self._send(200, f.read(), ctype)
+            return self._send(404, {"error": "not found"})
         if path == "/api/sheet_preview" and STATE.sheet and os.path.isfile(STATE.sheet["path"]):
             ext = os.path.splitext(STATE.sheet["path"])[1].lower()
             ctype = {".png": "image/png", ".webp": "image/webp"}.get(ext, "image/jpeg")
@@ -486,11 +541,15 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path == "/api/upload_sheet":
                 return self._send(200, self.upload_sheet(raw))
+            if path == "/api/upload_page":
+                return self._send(200, self.upload_page(raw))
             body = json.loads(raw or b"{}")
             handler = {
                 "/api/pick_sheet": self.pick_sheet, "/api/pick_folder": self.pick_folder,
                 "/api/save_template": self.save_template, "/api/open_folder": self.open_folder,
                 "/api/build": self.build, "/api/claude_kit": self.claude_kit,
+                "/api/pick_page": self.pick_page, "/api/save_hair_templates": self.save_hair_templates,
+                "/api/open_guide": self.open_guide,
             }.get(path)
             if not handler:
                 return self._send(404, {"error": "not found"})
@@ -516,6 +575,51 @@ class Handler(BaseHTTPRequestHandler):
             f.write(raw)
         STATE.sheet = sheet_info(dest)
         return {"sheet": STATE.sheet}
+
+    def pick_page(self, body):
+        kind = body.get("which")
+        if kind not in PAGE_KINDS:
+            return {"error": "Unknown picture"}
+        p = native_dialog("open", title=f"Choose the {PAGE_KINDS[kind][0].lower()}", initialdir=default_out_dir(), image=True)
+        if not p:
+            return {}
+        STATE.pages[kind] = sheet_info(os.path.abspath(p))
+        return {"page": STATE.pages[kind], "which": kind}
+
+    def upload_page(self, raw):
+        kind = unquote(self.headers.get("X-Which") or "")
+        name = os.path.basename(unquote(self.headers.get("X-Filename") or "page.png"))
+        if kind not in PAGE_KINDS:
+            return {"error": "Unknown picture"}
+        if not name.lower().endswith(IMAGE_EXT) or not raw:
+            return {"error": "Use a PNG, JPG or WEBP image"}
+        folder = os.path.join(WORK_DIR, "sheets", "long_hair_" + kind)
+        os.makedirs(folder, exist_ok=True)
+        dest = os.path.join(folder, name)
+        with open(dest, "wb") as f:
+            f.write(raw)
+        STATE.pages[kind] = sheet_info(dest)
+        return {"page": STATE.pages[kind], "which": kind}
+
+    def save_hair_templates(self, _):
+        p = native_dialog("folder", title="Choose where to save the two hair templates", initialdir=default_out_dir())
+        if not p:
+            return {}
+        saved = []
+        for src, dst in HAIR_TEMPLATES:
+            if os.path.isfile(os.path.join(HERE, src)):
+                shutil.copyfile(os.path.join(HERE, src), os.path.join(p, dst))
+                saved.append(dst)
+        return {"message": "Saved: " + ", ".join(saved)} if saved else {"error": "The hair templates aren't installed"}
+
+    def open_guide(self, _):
+        if not os.path.isfile(GUIDE):
+            return {"error": "The guide isn't installed"}
+        if sys.platform == "win32":
+            os.startfile(GUIDE)
+        else:
+            subprocess.Popen(["xdg-open", GUIDE])
+        return {}
 
     def pick_folder(self, _):
         p = native_dialog("folder", title="Choose where to save the model zip", initialdir=default_out_dir())
@@ -672,6 +776,21 @@ def make_claude_kit(m, problem, shares, rules):
             im.thumbnail((3072, 3072))
             im.save(os.path.join(kit, "sheet.png"))
             files.append("sheet.png")
+        # long hair: the three extra pictures (most long-hair problems come from them, and without
+        # them Claude can only guess)
+        from PIL import Image
+        for pats, dst in ((("*_sheet.png", "*_sheet.jpg", "reference.png", "*_reference.png"), "sheet_with_hair.png"),
+                          (("*_hair.png", "*_hair.jpg", "hair.png"), "hair_page.png"),
+                          (("*_hair_front.png", "*_hair_front.jpg", "hair_front.png"), "hair_front_page.png")):
+            hp = _first(folder, *pats)
+            if hp:
+                try:
+                    im = Image.open(hp).convert("RGB")
+                    im.thumbnail((3072, 3072))
+                    im.save(os.path.join(kit, dst))
+                    files.append(dst)
+                except Exception as e:
+                    notes.append(f"{dst} could not be copied ({e}).")
     if "The finished VTube Studio model" in shares:
         psd = _first(folder, os.path.join("artwork", "*.psd"))
         try:
@@ -717,7 +836,8 @@ def kit_message(name, problem, rules):
     msg = (f"Hi Claude! I made a VTuber model called {name} with VTuber One-Click and something looks wrong.\n\n"
            f"What I see: {problem}\n\n"
            "The attached files are my fix kit. Please read FIX_WITH_CLAUDE_BRIEF.md first (it explains how the tool "
-           "works), then problem.md and the pictures. Tell me in plain words what's causing it and what I should do "
+           "works), then problem.md, the build log and the pictures (for long hair also the hair pages). Tell me in "
+           "plain words what's causing it and what I should do "
            "to fix it. If you need a screenshot of something, ask me.")
     if "Ask me before changing any file" in rules:
         msg += " Please ask me before changing any file."
@@ -818,6 +938,10 @@ textarea{height:120px;padding:12px;font-size:14px;line-height:1.5;resize:none}
 input[type=text]:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:-1px}
 .drop{border:2px dashed var(--dash);border-radius:12px;padding:14px;display:flex;gap:12px;align-items:center;background:var(--inset);cursor:pointer;width:100%;text-align:left}
 .drop.over{border-color:var(--accent);background:#1E1B2B}
+.drop.small{padding:8px;gap:10px}
+.drop.small .thumb{width:72px;height:48px}
+.lhbtns{display:flex;gap:8px;flex-wrap:wrap}
+.lhbtns .btn{flex:1;min-width:140px}
 .thumb{width:96px;height:64px;border-radius:6px;background:var(--chip);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px;text-align:center;flex-shrink:0;overflow:hidden}
 .thumb img{width:100%;height:100%;object-fit:cover}
 .check{display:flex;align-items:center;gap:8px;font-size:13px}
@@ -880,7 +1004,7 @@ legend{padding:0 6px;font-weight:700;font-size:13px;color:var(--lav)}
       <input id="cname" type="text" placeholder="Your character's name" autocomplete="off">
     </div>
     <div class="field">
-      <div class="lbl">Character sheet</div>
+      <div class="lbl" id="sheetLbl">Character sheet</div>
       <button type="button" class="drop" id="drop">
         <div class="thumb" id="thumb">sheet preview</div>
         <div style="display:flex;flex-direction:column;gap:4px;min-width:0">
@@ -890,6 +1014,15 @@ legend{padding:0 6px;font-weight:700;font-size:13px;color:var(--lav)}
       </button>
     </div>
     <div id="checks" style="display:flex;flex-direction:column;gap:8px"></div>
+    <div class="field" id="longHair" style="display:none">
+      <div class="lbl">Long hair: 3 more pictures</div>
+      <div class="sub">The sheet above must be the <b>bald</b> sheet (same sheet, hair removed). All four pictures 3072 × 2048. The guide shows how to make them with ChatGPT.</div>
+      <div id="pages" style="display:flex;flex-direction:column;gap:6px"></div>
+      <div class="lhbtns">
+        <button type="button" class="btn" id="saveHairTemplates">Save hair templates</button>
+        <button type="button" class="btn" id="openGuide">Open the guide</button>
+      </div>
+    </div>
     <div class="grow"></div>
     <div style="display:flex;flex-direction:column;gap:10px">
       <div class="sub">No sheet yet? Give the template to ChatGPT with the prompt. The prompt adds a line for each trait you tick.</div>
@@ -1076,6 +1209,46 @@ $('drop').addEventListener('drop', async (e) => {
   if (r.sheet) showSheet(r.sheet); else toast(r.error || 'Could not use that file');
 });
 
+// ---------- long hair pages
+let pages = {};
+function renderPages() {
+  const kinds = cfg.page_kinds || {};
+  $('pages').innerHTML = Object.entries(kinds).map(([k, label]) => {
+    const p = pages[k];
+    const size = p && p.width ? ` · ${p.width} × ${p.height}` : '';
+    return `<button type="button" class="drop small" data-which="${esc(k)}">
+      <div class="thumb">${p ? `<img alt="" src="/api/page_preview?which=${esc(k)}&t=${Date.now()}">` : esc(label)}</div>
+      <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
+        <div style="font-weight:700">${esc(label)}</div>
+        <div class="sub" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p ? esc(p.name) + size : 'Drop it here or click to choose'}</div>
+      </div></button>`;
+  }).join('');
+}
+function longHairOn() { return ticked('trait').includes('long_hair'); }
+function showLongHair() {
+  const on = longHairOn();
+  $('longHair').style.display = on ? '' : 'none';
+  $('sheetLbl').textContent = on ? 'Bald sheet (hair removed)' : 'Character sheet';
+  if (on) renderPages();
+}
+$('groups').addEventListener('change', showLongHair);
+$('pages').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-which]'); if (!b) return;
+  const r = await api('/api/pick_page', { which: b.dataset.which });
+  if (r.page) { pages[r.which] = r.page; renderPages(); } else if (r.error) toast(r.error);
+});
+['dragenter', 'dragover'].forEach((ev) => $('pages').addEventListener(ev, (e) => { const b = e.target.closest('[data-which]'); if (!b) return; e.preventDefault(); b.classList.add('over'); }));
+['dragleave', 'drop'].forEach((ev) => $('pages').addEventListener(ev, (e) => { const b = e.target.closest('[data-which]'); if (!b) return; e.preventDefault(); b.classList.remove('over'); }));
+$('pages').addEventListener('drop', async (e) => {
+  const b = e.target.closest('[data-which]'); if (!b) return;
+  const f = e.dataTransfer.files[0]; if (!f) return;
+  if (!/\.(png|jpe?g|webp)$/i.test(f.name)) { toast('Use a PNG, JPG or WEBP image'); return; }
+  const r = await api('/api/upload_page', await f.arrayBuffer(), { 'X-Filename': encodeURIComponent(f.name), 'X-Which': encodeURIComponent(b.dataset.which) });
+  if (r.page) { pages[r.which] = r.page; renderPages(); } else toast(r.error || 'Could not use that file');
+});
+$('saveHairTemplates').addEventListener('click', async () => { const r = await api('/api/save_hair_templates', {}); if (r.message || r.error) toast(r.message || r.error); });
+$('openGuide').addEventListener('click', async () => { const r = await api('/api/open_guide', {}); if (r.error) toast(r.error); });
+
 // ---------- prompt + template
 $('copyPrompt').addEventListener('click', async () => {
   const traits = ticked('trait');
@@ -1130,6 +1303,7 @@ api('/api/latest_model').then((m) => { if (m.name) $('claudeName').textContent =
 
 api('/api/config').then(async (c) => {
   cfg = c; render(); if (c.sheet) showSheet(c.sheet);
+  pages = c.pages || {}; showLongHair();
   const s = await api('/api/status');            // reopened while a build runs: show it
   if (s.running) startPolling();
   else if (s.model_name && s.ok) { $('fixName').textContent = s.model_name; $('claudeName').textContent = s.model_name; }

@@ -26,12 +26,16 @@ writes your first message for you. You just drag and paste.
 
 Lost the copied message? It is also in **START HERE.txt** inside the same folder.
 
+**Long hair:** the folder also gets your sheet with hair, hair page and front hair page, so Claude can check
+whether the pages line up with your sheet (the most common cause of long-hair problems). Drag those in too.
+
 ## Describe the problem well
 
 Claude can only fix what it understands, so say **what** looks wrong, **where** on the model, and **when** you see it.
 
 | Too vague | Better |
 | --- | --- |
+| The teeth look wrong. | When I open my mouth wide the lower teeth float in the middle and the tongue shows under them. |
 | My hair looks bad. | There is a ring of spiky hair with white edges around the back of my head. It shows all the time, not only when I move. |
 | The mouth is broken. | When I open my mouth wide the mouth goes outside the face on the left side. |
 | Something is off with the clothes. | There are blocky dark patches on the front of my coat, below the shoulder straps. |

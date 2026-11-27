@@ -2,6 +2,54 @@
 
 What changed in each version of VTuber One-Click, newest first.
 
+## Alpha 1.55 (2026-11-27)
+
+Versions are now named **Alpha** with a number; Alpha 1.55 comes right after 0.3.5.
+
+- **Long hair is turned on.** Tick **Long hair** and the app asks for three more pictures besides your
+  sheet: the **sheet with hair**, the **hair page** and the **front hair + headwear page**. Your main sheet
+  becomes the **bald sheet** (the same sheet with the hair removed). All four are 3072 × 2048. The
+  **Save hair templates** button gives you the two hair templates, and **Open the guide** shows how to make
+  the pictures with ChatGPT, prompts included.
+- **New templates with ruler marks.** The sheet and hair templates have small ruler ticks round the edges,
+  so ChatGPT draws the hair pages at exactly the size and place of your sheet. The hair then goes on 1:1:
+  no guessing, no stretching.
+- **Long hair lines up with the face.** The bald sheet is never drawn exactly like the sheet with hair, so
+  the hair is now lined up on the face itself (eyes, brows, glasses, mouth). No more locks over the cheeks
+  or a fringe that sits off to one side.
+- **No holes in long hair.** The hair is cut out of the hair page by where it is, not only by its colour:
+  shading between the strands stays solid, and only real gaps between curls are see-through. The hair
+  behind the swaying side curtains is whole, so nothing opens up beside the arms when the hair moves.
+- **Back hair follows the head.** On a head turn the back hair and crown move with the face instead of
+  swinging the other way.
+- **Older hair pages still fit.** Pages made before the ruler templates are sized on the head as before
+  (headwear like bonnets included).
+- **Faces.** Drawn lips, nose and face markings stay on every build. The mouth line only shows when the
+  mouth opens, and a mouth can no longer come out wider than the face. Glasses no longer cut slots in the
+  cheeks, and skin the AI leaves out of the face is put back.
+- **Bigger, more natural teeth.** The teeth are sized on the open mouth instead of a fixed share of it: the
+  upper row runs edge to edge under the upper lip, the lower row follows the lower lip, and the tongue sits
+  behind it. Fangs drawn in the UPPER TEETH cell are kept. A new `teeth_scale` setting (in `config.yaml`)
+  makes them taller or shorter.
+- **Human ears move with the head.** Ears beside the face that the AI painted into the back hair (so they
+  swung with the hair) are moved onto the head. Hair in a colour close to the skin is left alone.
+- **Hats with animal ears.** A hat with ears behind it comes out as a whole hat with the ears moving on
+  their own behind it. The hat is no longer mistaken for a cloak, and when the close-up loses the hat, the
+  full-body hat is sized and placed on the close-up's drawing (no more band of stray pixels on the crown).
+- **Skirts, shorts and pants: pick one.** A new **Legs** row asks what the legs wear: **Skirt / dress**,
+  **Shorts** or **Pants / trousers / leggings**. Build won't start without it. Only skirts and dresses get the
+  skirt handling, so trousers (even in a colour close to the skin tone) are no longer cut at the waist. The
+  build also checks the layers and adds a note to the log if they look different from your pick, but your
+  pick always wins. An open long coat over pants no longer counts as a skirt. A black shirt no longer gets
+  cut out because it matches black hair.
+- **Cleaner edges.** No grey squares on hair tips, no blocks of sheet background in the clothes when two
+  pictures have different background colours, horns come out solid and animal ears clean.
+- **Fix with Claude knows more.** For long hair the fix kit now includes the sheet with hair and both hair
+  pages, and the notes Claude reads cover long hair, the Legs pick, teeth, ears and hats, with the log
+  lines to look for.
+- The guide (**VTuber One-Click Guide.pdf**) and the ChatGPT prompts (**CHATGPT_PROMPTS.md**) are installed
+  with the app.
+
 ## 0.3.5 (2026-11-23)
 
 - **Fix with Claude knows the new parts.** The brief that comes with the Fix with Claude folder now covers the
