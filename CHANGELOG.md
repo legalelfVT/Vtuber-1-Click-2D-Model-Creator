@@ -6,6 +6,10 @@ What changed in each version of VTuber One-Click, newest first.
 
 Versions are now named **Alpha** with a number; Alpha 1.55 comes right after 0.3.5.
 
+- **New license: free for noncommercial use.** VTuber One-Click is now under the PolyForm Noncommercial
+  License 1.0.0 instead of MIT: free for personal and hobby use only. No commercial use: no selling
+  it, no paid work with it, no selling models made with it. Copies received before 27 November 2026
+  stay MIT.
 - **Long hair is turned on.** Tick **Long hair** and the app asks for three more pictures besides your
   sheet: the **sheet with hair**, the **hair page** and the **front hair + headwear page**. Your main sheet
   becomes the **bald sheet** (the same sheet with the hair removed). All four are 3072 × 2048. The

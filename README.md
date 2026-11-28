@@ -130,5 +130,9 @@ into layers) > [PSD2Live](https://github.com/tsunehimatoi/psd2live) 3.4.5 (rigs 
 
 ## License
 
-This project's own code is MIT (see `LICENSE`). Setup downloads ComfyUI and PSD2Live from their official pages;
+This project's own code is free for personal and other **noncommercial** use under the
+[PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0) (see `LICENSE`).
+No commercial use is allowed: no selling it, no using it in a paid product or service, no paid
+commissions and no selling models made with it.
+(Copies received before 27 November 2026 were MIT.) Setup downloads ComfyUI and PSD2Live from their official pages;
 they are GPL-3.0 and are not included here. The AI models have their own licenses.
